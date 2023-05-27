@@ -1,18 +1,19 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, path::PathBuf};
 
-pub use gstreamer::ClockTime;
+use gst::glib;
+use gstreamer as gst;
+use gst::prelude::*;
 use gstreamer_player as gst_player;
-use gst_player::{Player};
-use tauri::Window;
+use gst::ClockTime;
+use gst_player::Player;
 
-pub struct PlayState {
-    pub sink: Mutex<Sink>,
-}
 pub struct Sink {
     pub player: Player,
-    pub playlist: Vec<String>,
+    pub playlist: Vec<PathBuf>,
     pub current_file: usize,
     pub status: Status,
+    pub position: String,
+    pub duration: String,
 }
 
 pub enum Status {
@@ -21,98 +22,95 @@ pub enum Status {
     Stopped,
 }
 
-#[derive(Clone, serde::Serialize)]
-struct ClockTimePayload {
-    pub hours: u64,
-    pub mins: u64,
-    pub secs: u64,
-    pub msecs: u64,
-}
+impl Default for Sink {
+    fn default() -> Self {
+        // init audio streams
+        match gst::init() {
+            Ok(_) => (),
+            Err(_) => {
+                eprintln!("Error initializing GStreamer")
+            },
+        }
 
-trait Payload {
-    fn new_payload(&self) -> ClockTimePayload;
-}
+        let dispatcher = gst_player::PlayerGMainContextSignalDispatcher::new(None);
+        let player = gst_player::Player::new(
+            None::<gst_player::PlayerVideoRenderer>,
+            Some(dispatcher.upcast::<gst_player::PlayerSignalDispatcher>()),
+        );
 
-impl Payload for ClockTime {
-    fn new_payload(&self) -> ClockTimePayload {
-        ClockTimePayload {
-            hours: self.hours(),
-            mins: self.minutes(),
-            secs: self.seconds(),
-            msecs: self.mseconds(),
+        Self {
+            player,
+            playlist: vec![],
+            current_file: 0,
+            status: Status::Stopped,
+            position: "--:--:--".to_string(),
+            duration: "--:--:--".to_string(),
         }
     }
 }
 
-pub fn add_to_queue(files: Vec<String>) {
+impl Sink {
+    pub fn add_to_queue(&mut self, files: Option<Vec<PathBuf>>) {
+        // set index for the current file to the first song if not already set
+        if self.playlist.is_empty() {
+            self.current_file = 0;
+        }
 
-    let mut sink = state.sink.lock().unwrap();
-
-    // set index for the current file to the first song if not already set
-    if sink.playlist.is_empty() {
-        sink.current_file = 0;
-    }
-
-    // default music file for testing
-    if files.is_empty() {
-        let file = r"file:///Users/charlie/Documents/Rust/playrs/src-tauri/assets/Scarlet Fire.mp3".to_string();
-        sink.playlist.push(file);
-    }
-
-    // coming from the file browser
-    else {
-        for file in files {
-            sink.playlist.push("file://".to_string() + &file);
+        match files {
+            Some(files) => for file in files {
+                self.playlist.push(PathBuf::from("file://".to_string() + file.to_str().unwrap()));
+            },
+            None => {
+            let file = PathBuf::from(r"file:///Users/charlie/Documents/Rust/playrs/src-tauri/assets/Scarlet Fire.mp3");
+            self.playlist.push(file);
+            },
         }
     }
-    // emit the changes to the playlist to the ui
-    window.emit("update-playlist", sink.playlist.clone())
-        .expect("Error updating playlist");
-}
 
-pub fn pop_playlist(state: PlayState) {
-    let mut sink = state.sink.lock().unwrap();
-
-    sink.playlist.pop();
-    window.emit("update-playlist", sink.playlist.clone())
-        .expect("Error updating playlist");
-}
-
-pub fn load_file(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
-    sink.player.set_uri(Some(sink.playlist[sink.current_file].as_str()));
-}
-
-pub fn play_sound(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
-    if sink.player.uri().is_none() {
-        sink.player.set_uri(Some(sink.playlist[sink.current_file].as_str()));
+    pub fn pop_playlist(&mut self) {
+        self.playlist.pop();
     }
-    sink.player.play();
-}
 
-pub fn pause_sound(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
-    sink.player.pause();
-}
-
-pub fn stop_sound(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
-    sink.player.stop();
-}
-
-pub fn get_duration(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
-
-    if let Some(dur) = sink.player.duration() {
-        window.emit("get-duration", dur.new_payload()).expect("Could not find duration");
+    pub fn load_file(&self) {
+        self.player.set_uri(self.playlist[self.current_file].to_str());
     }
-}
 
-pub fn get_position(state: PlayState) {
-    let sink = state.sink.lock().unwrap();
+    pub fn play_sound(&self) {
+        if self.player.uri().is_none() {
+            self.load_file();
+        }
+        self.player.play();
+    }
 
-    if let Some(pos) = sink.player.position() {
-        window.emit("get-position", pos.new_payload()).expect("Could not find position");
+    pub fn pause_sound(&self) {
+        self.player.pause();
+    }
+
+    pub fn stop_sound(&self) {
+        self.player.stop();
+    }
+
+    pub fn get_duration(&self) -> String {
+        match self.player.duration() {
+            Some(dur) => {
+                let hr = dur.hours();
+                let min = dur.minutes() - hr * 60;
+                let sec = dur.seconds() - (min * 60) - (hr * 60 * 60);
+                format!("{:<02}:{:<02}:{:<02}", hr, min, sec)
+            },
+            None => "--:--:--".to_string(),
+        }
+    }
+
+    pub fn get_position(&self) -> String {
+        match self.player.position() {
+            Some(pos) => {
+                let hr = pos.hours();
+                let min = pos.minutes() - hr * 60;
+                let sec = pos.seconds() - (min * 60) - (hr * 60 * 60);
+                format!("{:<02}:{:<02}:{:<02}", hr, min, sec)
+            },
+            None => "--:--:--".to_string(),
+        }
     }
 }
