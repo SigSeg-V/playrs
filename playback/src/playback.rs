@@ -1,10 +1,10 @@
-use std::{sync::Mutex, path::PathBuf};
+use std::{path::PathBuf};
 
-use gst::glib;
+
 use gstreamer as gst;
 use gst::prelude::*;
 use gstreamer_player as gst_player;
-use gst::ClockTime;
+
 use gst_player::Player;
 
 pub struct Sink {

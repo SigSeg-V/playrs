@@ -1,12 +1,15 @@
 use std::time::Duration;
 
 use gstreamer::ClockTime;
-use iced::{Application, Command, Element, widget::{row, container}, Alignment, executor, Theme, Subscription, time, Length};
-use native_dialog::FileDialog;
+use iced::{
+    executor, time,
+    widget::{column, container, row},
+    Alignment, Application, Command, Element, Length, Subscription, Theme,
+};
 use playback::{playback::Sink, Status};
+use rfd::FileDialog;
 
-use crate::components::*;
-
+use crate::components;
 
 pub struct Player {
     pub sink: Sink,
@@ -15,9 +18,10 @@ pub struct Player {
 #[derive(Debug, Clone)]
 pub enum Message {
     PlayPausePressed,
+    StopPressed,
     ForwardPressed,
     BackwardPressed,
-    Seek{seek_to: ClockTime},
+    Seek { seek_to: ClockTime },
     OpenFile,
     Tick,
 }
@@ -25,8 +29,13 @@ pub enum Message {
 impl Application for Player {
     type Message = Message;
 
-    fn new(_flags: ()) -> (Self, Command<Message>)  {
-        (Self{sink: Sink::default()}, Command::none())
+    fn new(_flags: ()) -> (Self, Command<Message>) {
+        (
+            Self {
+                sink: Sink::default(),
+            },
+            Command::none(),
+        )
     }
 
     fn title(&self) -> String {
@@ -41,50 +50,48 @@ impl Application for Player {
                     Status::Playing => {
                         self.sink.pause_sound();
                         Status::Paused
-                    },
+                    }
                     // set to play
                     _ => {
                         self.sink.play_sound();
                         Status::Playing
-                    },
+                    }
                 };
-            },
+            }
+            Message::StopPressed => {
+                self.sink.status = Status::Stopped;
+                self.sink.stop_sound();
+            }
             Message::ForwardPressed => todo!(),
             Message::BackwardPressed => todo!(),
-            Message::Seek { seek_to } => todo!(),
+            Message::Seek { seek_to: _ } => todo!(),
             Message::OpenFile => {
-                self.sink.add_to_queue(match FileDialog::new().set_location("~").show_open_multiple_file(){
-                    Ok(val) => Some(val),
-                    Err(_) => None,
-                });
+                self.sink
+                    .add_to_queue(FileDialog::new().set_directory("~").pick_files());
             }
             Message::Tick => {
                 self.sink.position = self.sink.get_position();
-            },
+                self.sink.duration = self.sink.get_duration();
+            }
         }
         Command::none()
     }
 
     fn view(&self) -> Element<Message> {
-
-        let content: Element<Message> = row![
-        res_text(&self.sink.position),
-        play_button(&self.sink.status),
-        play_text(&self.sink.status),
-        open_file_dialog_button(),
-        playlist_table(&self.sink.playlist)
-        ]
-            .spacing(50)
-            .padding(20)
-            .align_items(Alignment::Center)
-            .into();
-
-        container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x()
-            .center_y()
-            .into()
+        let content = components::control_panel(
+            &self.sink.status,
+            &self.sink.get_position(),
+            &self.sink.get_duration(),
+        );
+        column!(
+            container(content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_x()
+                .center_y(),
+            components::playlist_table(&self.sink.playlist),
+        )
+        .into()
     }
 
     type Executor = executor::Default;
@@ -95,7 +102,7 @@ impl Application for Player {
 
     fn subscription(&self) -> Subscription<Message> {
         match self.sink.status {
-            Status::Playing => time::every(Duration::from_millis(10)).map(|_| Message::Tick),
+            Status::Playing => time::every(Duration::from_millis(100)).map(|_| Message::Tick),
             _ => Subscription::none(),
         }
     }
