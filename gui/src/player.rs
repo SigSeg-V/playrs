@@ -3,8 +3,8 @@ use std::time::Duration;
 use gstreamer::ClockTime;
 use iced::{
     executor, time,
-    widget::{column, container, row},
-    Alignment, Application, Command, Element, Length, Subscription, Theme,
+    widget::{column, container},
+    Application, Command, Element, Length, Subscription, Theme,
 };
 use playback::{playback::Sink, Status};
 use rfd::FileDialog;
@@ -45,6 +45,9 @@ impl Application for Player {
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::PlayPausePressed => {
+                if self.sink.playlist.is_empty(){
+                    return Command::none()
+                }
                 self.sink.status = match self.sink.status {
                     // set to pause
                     Status::Playing => {
@@ -64,7 +67,9 @@ impl Application for Player {
             }
             Message::ForwardPressed => todo!(),
             Message::BackwardPressed => todo!(),
-            Message::Seek { seek_to: _ } => todo!(),
+            Message::Seek { seek_to } => {
+                self.sink.seek_absolute(seek_to);
+            },
             Message::OpenFile => {
                 self.sink
                     .add_to_queue(FileDialog::new().set_directory("~").pick_files());
@@ -80,15 +85,14 @@ impl Application for Player {
     fn view(&self) -> Element<Message> {
         let content = components::control_panel(
             &self.sink.status,
-            &self.sink.get_position(),
-            &self.sink.get_duration(),
+            &self.sink,
         );
         column!(
             container(content)
                 .width(Length::Fill)
-                .height(Length::Fill)
-                .center_x()
-                .center_y(),
+                //.height(Length::Fill)
+                .center_x(),
+            //.center_y(),
             components::playlist_table(&self.sink.playlist),
         )
         .into()

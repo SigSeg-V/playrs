@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gstreamer = "0.20.5"
-gstreamer-player = "0.20.5"
+gstreamer = "0.22.0"
+gstreamer-player = "0.22.0"

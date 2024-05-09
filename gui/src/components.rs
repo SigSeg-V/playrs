@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use iced::widget::{button, column, row};
+use iced::widget::{button, column, progress_bar, row, slider};
 use iced::{alignment, Element, Length};
 use iced::{
     widget::{text, Text},
     Font,
 };
+use playback::playback::Sink;
 
 use crate::player::Message;
 use playback::Status;
@@ -66,7 +67,7 @@ pub fn play_text<'a>(status: &Status) -> Element<'a, Message> {
     .into()
 }
 
-pub fn playlist_table<'a>(values: &Vec<PathBuf>) -> Element<'a, Message> {
+pub fn playlist_table<'a>(values: &[PathBuf]) -> Element<'a, Message> {
     column(
         values
             .iter()
@@ -85,11 +86,21 @@ pub fn playlist_table<'a>(values: &Vec<PathBuf>) -> Element<'a, Message> {
     .into()
 }
 
+pub fn top_bar<'a>(duration: u64, position: u64)-> Element<'a, Message> {
+    slider(0..=duration, position, |_|{}).into()
+}
+
 pub fn control_panel<'a>(
     status: &Status,
-    position: &String,
-    duration: &String,
+    sink: &Sink,
 ) -> Element<'a, Message> {
+    let position = sink.get_position();
+    let duration = sink.get_duration();
+    let position_u64 = sink.get_position_u64();
+    let duration_u64 = sink.get_duration_u64();
+
+    let pbar = top_bar(duration_u64, position_u64);
+
     let elems: Vec<Element<'a, Message>> = vec![
         stop_button(status),
         play_button(status),
@@ -97,5 +108,5 @@ pub fn control_panel<'a>(
         text(duration).into(),
         open_file_dialog_button(),
     ];
-    row(elems).spacing(50).into()
+    column!(pbar,row(elems).spacing(50)).into()
 }

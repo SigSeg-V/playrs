@@ -2,7 +2,7 @@ use std::{path::PathBuf};
 
 
 use gstreamer as gst;
-use gst::prelude::*;
+use gst::{prelude::*, ClockTime};
 use gstreamer_player as gst_player;
 
 use gst_player::Player;
@@ -112,5 +112,21 @@ impl Sink {
             },
             None => "--:--:--".to_string(),
         }
+    }
+
+    pub fn get_position_u64(&self) -> u64 {
+        self.player.position().unwrap_or_default().mseconds()
+    }
+
+    pub fn get_duration_u64(&self) -> u64 {
+        self.player.duration().unwrap_or_default().mseconds()
+    }
+
+    pub fn seek_absolute(&self, time: ClockTime) {
+        self.player.seek(time);
+    }
+
+    pub fn seek(&self, dt: ClockTime) {
+        self.player.seek(self.player.position().expect("invalid time") + dt)
     }
 }
